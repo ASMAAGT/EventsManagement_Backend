@@ -1,4 +1,6 @@
 const User = require("../models/users");
+const bcyrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 
 const signin = async (req, res) => {
   try {
@@ -6,22 +8,35 @@ const signin = async (req, res) => {
     if (!email || !password)
       return res
         .status(404)
-        .send({ success: false, message: "all field are required" });
+        .send({ success: false, message: "all fields are required" });
+
     let user = await User.findOne({ email });
+
     if (!user)
       return res
         .status(404)
-        .send({ success: false, message: "Account not found" });
-    let isCorrectPassword = await bcrypt.compare(password, user.password);
+        .send({ success: false, message: "Account doesn't exists" });
+
+    let isCorrectPassword = await bcyrypt.compare(password, user.password);
+
     delete user._doc.password;
+
     if (isCorrectPassword) {
-      return res.status(200).send({ success: true, user });
+      let token = jwt.sign(
+        { id: user._id, role: user.role },
+        process.env.SECRET,
+        { expiresIn: "1h" }
+      );
+
+      return res.status(200).send({ success: true, user, token });
     } else {
       return res
         .status(404)
-        .send({ success: false, message: "Invalid password or email" });
+        .send({ success: false, message: "Please verify your credentials" });
     }
-  } catch (error) {}
+  } catch (err) {
+    res.status(404).send({ success: false, message: err });
+  }
 };
 
 const register = async (req, res) => {
@@ -30,7 +45,7 @@ const register = async (req, res) => {
     const user = await User.findOne({ email });
     if (user)
       return res
-        .stats(404)
+        .status(404)
         .send({ success: false, message: "User already exists" });
 
     const newUser = new User({ email, password, firstname, lastname });
@@ -43,8 +58,18 @@ const register = async (req, res) => {
       user: createdUser,
     });
   } catch (err) {
+    console.log(err);
     res.status(404).send({ success: false, message: err });
   }
 };
 
-module.exports = { signin, register };
+const getUsers = async (req, res) => {
+  try {
+    const users = await User.find();
+    res.status(200).send({ success: true, users });
+  } catch (err) {
+    res.status(404).send({ success: false, err });
+  }
+};
+
+module.exports = { signin, register, getUsers };
